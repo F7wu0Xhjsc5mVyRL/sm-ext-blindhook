@@ -1,0 +1,14 @@
+"Games"
+{
+	"cstrike"
+	{
+		"Signatures"
+		{
+			"PercentageOfFlashForPlayer"
+			{
+				"library"	"server"
+				"linux"		"@_Z26PercentageOfFlashForPlayerP11CBaseEntity6VectorS0_"
+			}
+		}
+	}
+}

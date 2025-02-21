@@ -2,6 +2,7 @@
  * =============================================================================
  * SourceMod Blind Hook Extension
  * Copyright (C) 2019 Maxim "Kailo" Telezhenko. All rights reserved.
+ * Copyright (C) 2025 InFro. All rights reserved.
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -35,11 +36,11 @@
  */
 
 /* Basic information exposed publicly */
-#define SMEXT_CONF_NAME			"Blind Hook"
+#define SMEXT_CONF_NAME			"[CSS] Blind Hook"
 #define SMEXT_CONF_DESCRIPTION	"Adds SourcePawn hook for flashbang's blind action."
-#define SMEXT_CONF_VERSION		"1.0-cssob"
-#define SMEXT_CONF_AUTHOR		"Kailo"
-#define SMEXT_CONF_URL			"https://github.com/Kailo97"
+#define SMEXT_CONF_VERSION		"1.1.0"
+#define SMEXT_CONF_AUTHOR		"Kailo, InFro"
+#define SMEXT_CONF_URL			"https://github.com/F7wu0Xhjsc5mVyRL/sm-ext-blindhook"
 #define SMEXT_CONF_LOGTAG		"Blind Hook"
 #define SMEXT_CONF_LICENSE		"GPL"
 #define SMEXT_CONF_DATESTRING	__DATE__
@@ -68,7 +69,7 @@
 //#define SMEXT_ENABLE_LIBSYS
 //#define SMEXT_ENABLE_MENUS
 //#define SMEXT_ENABLE_ADTFACTORY
-#define SMEXT_ENABLE_PLUGINSYS
+//#define SMEXT_ENABLE_PLUGINSYS
 //#define SMEXT_ENABLE_ADMINSYS
 //#define SMEXT_ENABLE_TEXTPARSERS
 //#define SMEXT_ENABLE_USERMSGS

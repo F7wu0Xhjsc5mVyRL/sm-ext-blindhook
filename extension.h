@@ -2,6 +2,7 @@
  * =============================================================================
  * SourceMod Blind Hook Extension
  * Copyright (C) 2019 Maxim "Kailo" Telezhenko. All rights reserved.
+ * Copyright (C) 2025 InFro. All rights reserved.
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -42,8 +43,7 @@
  * Note: Uncomment one of the pre-defined virtual functions in order to use it.
  */
 class BlindHook :
-	public SDKExtension,
-	public IPluginsListener
+	public SDKExtension
 {
 public:
 	/**
@@ -80,9 +80,6 @@ public:
 	 * @return			True if working, false otherwise.
 	 */
 	//virtual bool QueryRunning(char *error, size_t maxlength);
-public: // IPluginsListener
-	void OnPluginLoaded(IPlugin *plugin);
-	void OnPluginUnloaded(IPlugin *plugin);
 public:
 #if defined SMEXT_CONF_METAMOD
 	/**
@@ -116,8 +113,6 @@ public:
 	 */
 	//virtual bool SDK_OnMetamodPauseChange(bool paused, char *error, size_t maxlength);
 #endif
-private:
-	bool m_BlindPlayerHookInstalled;
 };
 
 #endif // _INCLUDE_SOURCEMOD_EXTENSION_PROPER_H_

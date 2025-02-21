@@ -2,6 +2,7 @@
  * =============================================================================
  * SourceMod Blind Hook Extension
  * Copyright (C) 2019 Maxim "Kailo" Telezhenko. All rights reserved.
+ * Copyright (C) 2025 InFro. All rights reserved.
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -28,6 +29,9 @@
 
 #include "extension.h"
 #include "subhook/subhook.h"
+#include <mathlib/vector.h>
+#include <datamap.h>
+#include <basehandle.h>
 
 /**
  * @file extension.cpp
@@ -38,108 +42,118 @@ BlindHook g_BlindHook;		/**< Global singleton for extension's main interface */
 
 SMEXT_LINK(&g_BlindHook);
 
-
-using namespace subhook;
-
-IGameConfig *g_pGameConf;
-Hook *g_HBlindPlayer;
-void *g_addr_continue;
-void *g_addr_skip;
 IForward *g_pBlindForward = NULL;
+static subhook::Hook s_HookPercentageOfFlashForPlayer;
 
-// Extension is linux only
+using PercentageOfFlashForPlayerFn = float(__cdecl *)(CBaseEntity *, Vector, CBaseEntity *);
+static PercentageOfFlashForPlayerFn PercentageOfFlashForPlayer = NULL;
 
-bool __stdcall BlindHookHandler(CBaseEntity *pEntity, CBaseEntity *pevInflictor, CBaseEntity *pevAttacker)
+CBaseEntity *GetThrower(CBaseEntity *pEntity)
 {
-	cell_t result = Pl_Continue;
+	datamap_t *pMap = gamehelpers->GetDataMap(pEntity);
+	if (!pMap)
+	{
+		return NULL;
+	}
 
+	sm_datatable_info_t info;
+	if (!gamehelpers->FindDataMapInfo(pMap, "m_hThrower", &info))
+	{
+		return NULL;
+	}
+
+	CBaseHandle *hndl = reinterpret_cast<CBaseHandle *>(reinterpret_cast<uint8_t *>(pEntity) + info.actual_offset);
+	if (!hndl)
+	{
+		return NULL;
+	}
+
+	return gamehelpers->ReferenceToEntity(hndl->GetEntryIndex());
+}
+
+float Hooked_PercentageOfFlashForPlayer(CBaseEntity *pEntity, Vector flashPos, CBaseEntity *pevInflictor)
+{
+	float percentageOfFlash = PercentageOfFlashForPlayer(pEntity, flashPos, pevInflictor);
+	if (g_pBlindForward->GetFunctionCount() < 1 || percentageOfFlash <= 0.0f)
+	{
+		return percentageOfFlash;
+	}
+
+	CBaseEntity *pevAttacker = GetThrower(pevInflictor);
+	if (!pevAttacker)
+	{
+		pevAttacker = pevInflictor;
+	}
+
+	int attackerIndex = -1;
+	if (pevAttacker != pevInflictor)
+	{
+		attackerIndex = gamehelpers->EntityToBCompatRef(pevAttacker);
+	}
+
+	cell_t result = Pl_Continue;
 	g_pBlindForward->PushCell(gamehelpers->EntityToBCompatRef(pEntity));
-	g_pBlindForward->PushCell(pevAttacker != pevInflictor ? gamehelpers->EntityToBCompatRef(pevAttacker) : -1);
+	g_pBlindForward->PushCell(attackerIndex);
 	g_pBlindForward->PushCell(gamehelpers->EntityToBCompatRef(pevInflictor));
 	g_pBlindForward->Execute(&result);
 
-	return result != Pl_Continue;
-}
+	if (result == Pl_Handled || result == Pl_Stop)
+	{
+		return 0.0f;
+	}
 
-__declspec(naked) void blindhook()
-{
-	__asm push [ebp+0x18]				// pevAttacker
-	__asm push [ebp+0x14]				// pevInflictor
-	__asm push ebx						// pEntity
-	__asm call BlindHookHandler;
-
-	__asm test al, al;
-	__asm jz Trampoline
-
-	// skip
-	__asm mov edx, g_addr_skip
-	__asm jmp edx
-
-	// Trampoline back
-	__asm Trampoline:
-	__asm _emit 0x8B
-	__asm _emit 0x03
-	__asm _emit 0x8D
-	__asm _emit 0x4D
-	__asm _emit 0xD0
-
-	__asm mov edx, g_addr_continue
-	__asm jmp edx
+	return percentageOfFlash;
 }
 
 bool BlindHook::SDK_OnLoad(char *error, size_t maxlength, bool late)
 {
-	if (!gameconfs->LoadGameConfigFile("blindhook.games", &g_pGameConf, error, maxlength))
-		return false;
-
-	void *addr;
-	if (!g_pGameConf->GetMemSig("RadiusFlash", &addr) || !addr)
+	IGameConfig* pGameConfig = NULL;
+	if (!gameconfs->LoadGameConfigFile("blindhook.games", &pGameConfig, error, maxlength))
 	{
-		snprintf(error, maxlength, "Failed to lookup RadiusFlash signature.");
 		return false;
 	}
 
-	gameconfs->CloseGameConfigFile(g_pGameConf);
+	void *addr;
+	if (!pGameConfig->GetMemSig("PercentageOfFlashForPlayer", &addr) || !addr)
+	{
+		ke::SafeSprintf(error, maxlength, "Failed to get signature for PercentageOfFlashForPlayer");
+		return false;
+	}
 
-	void *addr_hook;
+	gameconfs->CloseGameConfigFile(pGameConfig);
 
-	addr_hook = (void*)((uintptr_t)addr + 0xCC);
-	g_addr_continue = (void*)((uintptr_t)addr + 0xD1);
-	g_addr_skip = (void*)((uintptr_t)addr + 0x68);
+	if (!s_HookPercentageOfFlashForPlayer.Install(addr, (void *)Hooked_PercentageOfFlashForPlayer) ||
+		!s_HookPercentageOfFlashForPlayer.GetTrampoline())
+	{
+		ke::SafeSprintf(error, maxlength, "Failed to install hook for PercentageOfFlashForPlayer");
+		return false;
+	}
 
-	sharesys->RegisterLibrary(myself, "blindhook");
-	plsys->AddPluginsListener(this);
-
-	g_HBlindPlayer = new Hook(addr_hook, (void *)blindhook);
-
-	m_BlindPlayerHookInstalled = false;
+	PercentageOfFlashForPlayer = PercentageOfFlashForPlayerFn(s_HookPercentageOfFlashForPlayer.GetTrampoline());
+	if(!PercentageOfFlashForPlayer)
+	{
+		ke::SafeSprintf(error, maxlength, "Failed to get trampoline for PercentageOfFlashForPlayer");
+		return false;
+	}
 
 	g_pBlindForward = forwards->CreateForward("CS_OnBlindPlayer", ET_Hook, 3, NULL, Param_Cell, Param_Cell, Param_Cell);
+	if (!g_pBlindForward)
+	{
+		ke::SafeSprintf(error, maxlength, "Failed to create forward CS_OnBlindPlayer");
+		return false;
+	}
+
+	sharesys->RegisterLibrary(myself, "blindhook");
 
 	return true;
 }
 
 void BlindHook::SDK_OnUnload()
 {
-	plsys->RemovePluginsListener(this);
+	if (s_HookPercentageOfFlashForPlayer.IsInstalled())
+	{
+		s_HookPercentageOfFlashForPlayer.Remove();
+	}
+
 	forwards->ReleaseForward(g_pBlindForward);
-	delete g_HBlindPlayer;
-}
-
-void BlindHook::OnPluginLoaded(IPlugin *plugin)
-{
-	if (!m_BlindPlayerHookInstalled && g_pBlindForward->GetFunctionCount())
-	{
-		g_HBlindPlayer->Install();
-		m_BlindPlayerHookInstalled = true;
-	}
-}
-
-void BlindHook::OnPluginUnloaded(IPlugin *plugin)
-{
-	if (m_BlindPlayerHookInstalled && !g_pBlindForward->GetFunctionCount())
-	{
-		g_HBlindPlayer->Remove();
-		m_BlindPlayerHookInstalled = false;
-	}
 }
